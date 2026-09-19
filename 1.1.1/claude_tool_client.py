@@ -22,11 +22,7 @@ from anthropic import Anthropic
 # Load variables from .env file
 load_dotenv()
 
-# Access the value of the ANTHROPIC_API_KEY variable
-anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
 
-# Set the Anthropic API key
-anthropic = Anthropic(api_key=anthropic_api_key)
 MODEL = "claude-haiku-4-5"
 
 # ---------------------------------------------------------------------------
@@ -133,50 +129,53 @@ TOOLS = [
 # Conversation loop
 # ---------------------------------------------------------------------------
  
- 
+
 def run_conversation(user_message: str, client: Anthropic, verbose: bool = True) -> str:
     messages = [{"role": "user", "content": user_message}]
- 
+
     while True:
+        # 1. Send the full conversation so far, with tools available
         response = client.messages.create(
             model=MODEL,
             max_tokens=1024,
             tools=TOOLS,
             messages=messages,
         )
- 
+
+        # 2. Always record what Claude said/did — including tool_use blocks —
+        #    before deciding what to do next.
         messages.append({"role": "assistant", "content": response.content})
- 
+
+        # 3. THE key branch: stop_reason, not content inspection.
         if response.stop_reason != "tool_use":
-            return "".join(block.text for block in response.content if block.type == "text")
- 
+            # Claude ended the turn on its own — done, no more tools requested.
+            return "".join(b.text for b in response.content if b.type == "text")
+
+        # 4. stop_reason == "tool_use": run every tool_use block in this turn.
         tool_results = []
         for block in response.content:
             if block.type != "tool_use":
                 continue
-            if verbose:
-                print(f"[tool call] {block.name}({json.dumps(block.input)})")
- 
             fn = TOOL_FUNCTIONS.get(block.name)
             output = fn(block.input) if fn else {"error": f"Unknown tool: {block.name}"}
- 
-            tool_results.append(
-                {
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": json.dumps(output),
-                }
-            )
- 
-        messages.append({"role": "user", "content": tool_results})
- 
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": json.dumps(output),
+            })
+
+        # 5. Feed results back as a new user turn, then loop again.
+        messages.append({"role": "user", "content": tool_results}) 
  
 if __name__ == "__main__":
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    # Access the value of the ANTHROPIC_API_KEY variable
+    anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
     if not api_key:
-        raise SystemExit("Set the ANTHROPIC_API_KEY environment variable first.")
- 
-    client = Anthropic(api_key=api_key)
+            raise SystemExit("Set the ANTHROPIC_API_KEY environment variable first.")
+    
+
+    # Set the Anthropic API key
+    client = Anthropic(api_key=anthropic_api_key)
  
     demo_prompt = (
         "What is (245 * 3) - 17? Also, search the web for 'best cut vegetable "
