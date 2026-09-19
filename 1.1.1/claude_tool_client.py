@@ -170,7 +170,7 @@ def run_conversation(user_message: str, client: Anthropic, verbose: bool = True)
 if __name__ == "__main__":
     # Access the value of the ANTHROPIC_API_KEY variable
     anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
-    if not api_key:
+    if not anthropic_api_key:
             raise SystemExit("Set the ANTHROPIC_API_KEY environment variable first.")
     
 
